@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jomashop Price Tracker</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <style>
+        body { font-family: 'Noto Sans KR', sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+        h2 { text-align: center; color: #333; }
+        canvas { background-color: #fff; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); padding: 10px; }
+        .footer { text-align: center; margin-top: 20px; font-size: 0.8em; color: #666; }
+    </style>
+</head>
+<body>
+    <h2>⌚ 조마샵 가격 변동 대시보드</h2>
+    <canvas id="priceChart"></canvas>
+    <div class="footer">데이터는 6시간마다 갱신됩니다.</div>
+
+    <script>
+        // CSV 파일 불러오기 (캐시 방지를 위해 시간 추가)
+        const csvUrl = 'price_history.csv?t=' + new Date().getTime();
+
+        Papa.parse(csvUrl, {
+            download: true,
+            header: true,
+            complete: function(results) {
+                const data = results.data;
+                const groupedData = {};
+
+                // 데이터 그룹화 (제품별로 나누기)
+                data.forEach(row => {
+                    if (!row.name || !row.date || !row.price) return;
+                    if (!groupedData[row.name]) {
+                        groupedData[row.name] = { dates: [], prices: [] };
+                    }
+                    groupedData[row.name].dates.push(row.date);
+                    groupedData[row.name].prices.push(parseFloat(row.price));
+                });
+
+                // 차트 데이터셋 만들기
+                const datasets = [];
+                const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF'];
+                let colorIdx = 0;
+
+                for (const [name, info] of Object.entries(groupedData)) {
+                    datasets.push({
+                        label: name,
+                        data: info.prices,
+                        borderColor: colors[colorIdx % colors.length],
+                        backgroundColor: colors[colorIdx % colors.length],
+                        fill: false,
+                        tension: 0.1
+                    });
+                    colorIdx++;
+                }
+
+                // 차트 그리기
+                const ctx = document.getElementById('priceChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: Object.values(groupedData)[0].dates, // 첫 번째 제품의 날짜 기준
+                        datasets: datasets
+                    },
+                    options: {
+                        responsive: true,
+                        interaction: {
+                            mode: 'index',
+                            intersect: false,
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: false,
+                                title: { display: true, text: '가격 ($)' }
+                            }
+                        }
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>
