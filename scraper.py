@@ -30,7 +30,21 @@ TARGETS = [
     {
         "name": "프말 제라늄",
         "url": "https://www.jomashop.com/frederic-malle-mens-geranium-pour-monsieur-edp-spray-3-4-oz-fragrances-3700135003828.html"
-    }
+    },
+  {
+        "name": "옴므 이데알",
+        "url": "https://www.jomashop.com/guerlain-mens-lhomme-ideal-edp-spray-3-3-oz-fragrances-3346470303126.html"
+    },
+  {
+        "name": "크레도",
+        "url": "https://www.jomashop.com/nishane-unisex-kredo-extrait-de-parfum-3-4-oz-fragrances-8683608070594.html"
+    },
+  {
+        "name": "지젠프",
+        "url": "https://www.jomashop.com/givenchy-mens-gentleman-reserve-privee-edp-spray-3-3-oz-fragrances-3274872439078.html"
+    }    
+
+
 ]
 
 # --- 4. 텔레그램 전송 함수 (사진 포함) ---
