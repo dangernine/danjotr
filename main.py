@@ -9,10 +9,9 @@ import re
 import plotly.express as px  # 그래프 생성용
 
 # ==========================================
-# [사용자 설정] 아래 주소를 본인 것으로 수정하세요!
+# [사용자 설정] 아래 주소를 본인 깃허브 주소로 꼭 수정하세요!
 # ==========================================
 DASHBOARD_URL = "https://dangernine.github.io/danjotr/"  
-# (예시: https://아이디.github.io/저장소이름/)
 
 # 추적할 브랜드 목록
 TARGET_BRANDS = [
@@ -108,17 +107,22 @@ async def send_telegram_alert(item, alert_type, old_price=0):
     except Exception as e:
         print(f"❌ 텔레그램 전송 실패: {e}")
 
-# --- 3. 크롤링 관련 함수 ---
+# --- 3. 크롤링 관련 함수 (수정됨: 스크롤 제한) ---
 async def scroll_to_bottom(page):
-    print("   ⬇️ 전체 로딩을 위해 스크롤 중...")
-    previous_height = await page.evaluate("document.body.scrollHeight")
-    while True:
+    print("   ⬇️ 스크롤 시작 (최대 15회 제한)...")
+    
+    # 무한 로딩 방지를 위해 최대 15번까지만 스크롤 (필요시 숫자 조정)
+    for _ in range(15):
+        previous_height = await page.evaluate("document.body.scrollHeight")
         await page.keyboard.press("End")
-        await asyncio.sleep(1.5)
+        await asyncio.sleep(2) # 로딩 대기
+        
         new_height = await page.evaluate("document.body.scrollHeight")
         if new_height == previous_height:
+            print("   ✅ 페이지 끝 도달")
             break
-        previous_height = new_height
+            
+    print("   ⏹️ 스크롤 종료")
 
 async def scrape_brand_page(page, brand_info):
     name = brand_info['name']
@@ -233,7 +237,7 @@ async def main():
                         await send_telegram_alert(item, "DROP", old_price)
                         price_map[sku] = price # 중복 알림 방지
 
-            # 브랜드 간 딜레이
+            # 브랜드 간 딜레이 (차단 방지)
             await asyncio.sleep(random.uniform(2, 5))
 
         await browser.close()
