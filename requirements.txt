@@ -2,3 +2,5 @@ playwright
 pandas
 python-telegram-bot
 matplotlib
+streamlit
+plotly
