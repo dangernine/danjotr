@@ -2,17 +2,19 @@ import asyncio
 from playwright.async_api import async_playwright
 import pandas as pd
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 import telegram
 import random
 import re
-import plotly.express as px # 그래프 그리기용
+import plotly.express as px  # 그래프 생성용
 
-# --- 1. 사용자 설정 ---
-# 본인의 깃허브 아이디와 저장소 이름으로 주소를 수정하세요!
-# 예: https://gildong.github.io/jomashop-bot/
-DASHBOARD_URL = "https://[본인아이디].github.io/[저장소이름]/"
+# ==========================================
+# [사용자 설정] 아래 주소를 본인 것으로 수정하세요!
+# ==========================================
+DASHBOARD_URL = "https://dangernine.github.io/danjotr/"  
+# (예시: https://아이디.github.io/저장소이름/)
 
+# 추적할 브랜드 목록
 TARGET_BRANDS = [
     {"name": "킬리안 (Kilian)", "url": "https://www.jomashop.com/kilian-fragrances.html"},
     {"name": "니샤네 (Nishane)", "url": "https://www.jomashop.com/nishane-fragrances.html"},
@@ -23,16 +25,16 @@ TARGET_BRANDS = [
     {"name": "톰포드 (Tom Ford)", "url": "https://www.jomashop.com/tom-ford-fragrances.html"}
 ]
 
-# --- 2. 환경 변수 및 설정 ---
-TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN', '') 
+# 환경 변수 및 파일명 설정
+TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN', '')
 CHAT_ID = os.environ.get('CHAT_ID', '')
-CSV_FILE = "price_history.csv" 
-HTML_FILE = "index.html" # 생성될 대시보드 파일명
+CSV_FILE = "price_history.csv"  # 데이터 저장 파일
+HTML_FILE = "index.html"        # 대시보드 웹페이지 파일
 
-# --- 3. 대시보드(HTML) 생성 함수 ---
+# --- 1. 대시보드(HTML) 생성 함수 ---
 def create_dashboard_html(df):
     try:
-        # 날짜 형식 변환
+        # 날짜 형식 변환 및 정렬
         df['date'] = pd.to_datetime(df['date'])
         df = df.sort_values(by='date')
 
@@ -44,18 +46,27 @@ def create_dashboard_html(df):
             color="name", 
             title="Jomashop Price History (All Brands)",
             markers=True,
-            hover_data=["brand", "price"]
+            hover_data=["brand", "price"],
+            template="plotly_white"
         )
         
-        # HTML 파일로 저장 (CDN 의존성 없이 생성)
+        # 그래프 디자인 다듬기
+        fig.update_layout(
+            xaxis_title="Date",
+            yaxis_title="Price ($)",
+            legend_title="Product Name",
+            hovermode="x unified"
+        )
+        
+        # HTML 파일로 저장
         fig.write_html(HTML_FILE)
-        print("📊 대시보드(index.html) 업데이트 완료")
+        print("📊 대시보드(index.html) 생성 완료")
         return True
     except Exception as e:
         print(f"❌ 대시보드 생성 실패: {e}")
         return False
 
-# --- 4. 텔레그램 전송 함수 ---
+# --- 2. 텔레그램 전송 함수 ---
 async def send_telegram_alert(item, alert_type, old_price=0):
     if not TELEGRAM_TOKEN or not CHAT_ID:
         return
@@ -65,19 +76,19 @@ async def send_telegram_alert(item, alert_type, old_price=0):
         
         if alert_type == "NEW":
             emoji = "🚨✨"
-            title = "신상 입고"
+            title = "신상 입고 알림"
             price_msg = f"💰 **${item['price']:,.0f}**"
         
         elif alert_type == "DROP":
             emoji = "🔻🔥"
-            title = "가격 인하"
+            title = "가격 인하 발생"
             diff = old_price - item['price']
             price_msg = (
                 f"📉 **${old_price:,.0f} ➡️ ${item['price']:,.0f}**\n"
                 f"(Save ${diff:,.0f}!)"
             )
         
-        # 메시지에 대시보드 링크 추가
+        # 메시지 본문 (대시보드 링크 포함)
         msg = (
             f"{emoji} **[{item['brand']}] {title}**\n\n"
             f"📦 {item['name']}\n"
@@ -86,20 +97,20 @@ async def send_telegram_alert(item, alert_type, old_price=0):
             f"📊 [가격 변동 대시보드]({DASHBOARD_URL})"
         )
         
-        # 이미지 전송
+        # 이미지 있으면 사진 전송, 없으면 텍스트만
         if item.get('image') and item['image'].startswith('http'):
             await bot.send_photo(chat_id=CHAT_ID, photo=item['image'], caption=msg, parse_mode='Markdown')
         else:
             await bot.send_message(chat_id=CHAT_ID, text=msg, parse_mode='Markdown')
             
-        print(f"🔔 알림 전송: {item['name']}")
+        print(f"🔔 알림 전송 완료: {item['name']}")
         
     except Exception as e:
-        print(f"❌ 텔레그램 실패: {e}")
+        print(f"❌ 텔레그램 전송 실패: {e}")
 
-# --- 5. 크롤링 관련 함수들 ---
+# --- 3. 크롤링 관련 함수 ---
 async def scroll_to_bottom(page):
-    print("   ⬇️ 스크롤 중...")
+    print("   ⬇️ 전체 로딩을 위해 스크롤 중...")
     previous_height = await page.evaluate("document.body.scrollHeight")
     while True:
         await page.keyboard.press("End")
@@ -154,7 +165,7 @@ async def scrape_brand_page(page, brand_info):
                     'name': title,
                     'price': price,
                     'sku': sku,
-                    'link': full_link, # link 통일
+                    'link': full_link,
                     'image': img_src
                 })
             except:
@@ -164,23 +175,23 @@ async def scrape_brand_page(page, brand_info):
         return items
 
     except Exception as e:
-        print(f"   ❌ 에러: {e}")
+        print(f"   ❌ 에러 발생: {e}")
         return []
 
-# --- 6. 메인 로직 ---
+# --- 4. 메인 실행 로직 ---
 async def main():
     print("--- 🚀 조마샵 봇 시작 ---")
     
-    # 1. 기존 데이터 로드
+    # 1. 기존 데이터 로드 (비교용)
     if os.path.exists(CSV_FILE):
         try:
             history_df = pd.read_csv(CSV_FILE)
             history_df['date'] = pd.to_datetime(history_df['date'])
-            # 최신 가격 맵 생성
+            # 최신 상태 추출 (SKU별 마지막 가격)
             last_status = history_df.sort_values('date').groupby('sku').last()
             price_map = last_status['price'].to_dict()
             known_skus = set(history_df['sku'].unique())
-            print(f"📂 기존 데이터: {len(known_skus)}개 상품")
+            print(f"📂 기존 데이터: {len(known_skus)}개 상품 로드됨")
         except:
             history_df = pd.DataFrame()
             price_map = {}
@@ -192,6 +203,7 @@ async def main():
 
     new_data_list = []
     
+    # 2. 브라우저 실행 및 크롤링
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(viewport={'width': 1920, 'height': 1080})
@@ -203,29 +215,35 @@ async def main():
             for item in current_items:
                 sku = item['sku']
                 price = item['price']
+                
+                # 수집된 데이터는 무조건 저장 리스트에 추가
                 new_data_list.append(item)
 
-                # 알림 로직
+                # --- 비교 및 알림 로직 ---
                 if sku not in known_skus:
+                    # 신상 발견 (첫 실행 아닐 때만 알림)
                     if len(known_skus) > 0:
                         await send_telegram_alert(item, "NEW")
-                        known_skus.add(sku)
+                        known_skus.add(sku) # 중복 알림 방지
+                
                 elif sku in price_map:
                     old_price = price_map[sku]
+                    # 가격 인하 발견
                     if old_price > 0 and price > 0 and price < old_price:
                         await send_telegram_alert(item, "DROP", old_price)
-                        price_map[sku] = price 
+                        price_map[sku] = price # 중복 알림 방지
 
+            # 브랜드 간 딜레이
             await asyncio.sleep(random.uniform(2, 5))
 
         await browser.close()
 
-    # 2. 데이터 저장 및 대시보드 업데이트
+    # 3. 데이터 저장 및 대시보드 업데이트
     if new_data_list:
         new_df = pd.DataFrame(new_data_list)
-        save_cols = ['date', 'brand', 'name', 'price', 'sku', 'link'] # 저장은 필요한 것만
+        save_cols = ['date', 'brand', 'name', 'price', 'sku', 'link'] 
         
-        # CSV 누적 저장
+        # CSV 파일에 누적 저장 (append mode)
         if os.path.exists(CSV_FILE):
             new_df[save_cols].to_csv(CSV_FILE, mode='a', header=False, index=False, encoding='utf-8-sig')
         else:
@@ -233,13 +251,12 @@ async def main():
             
         print(f"\n💾 데이터 저장 완료.")
         
-        # ★ 대시보드 파일(index.html) 재생성 ★
-        # 전체 데이터를 다시 읽어서 그래프 그리기
+        # ★ 전체 데이터를 다시 읽어서 대시보드(HTML) 재생성
         full_df = pd.read_csv(CSV_FILE)
         create_dashboard_html(full_df)
 
     else:
-        print("\n⚠️ 데이터 없음")
+        print("\n⚠️ 수집된 데이터가 없습니다.")
 
 if __name__ == "__main__":
     asyncio.run(main())
