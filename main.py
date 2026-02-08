@@ -36,14 +36,13 @@ HTML_FILE = "index.html"
 # [UI] 텔레그램 전송용 그래프 폰트 설정
 plt.rcParams['axes.unicode_minus'] = False
 
-# --- 1. 웹 대시보드(HTML) 생성 함수 (에러 방지 추가됨) ---
+# --- 1. 웹 대시보드(HTML) 생성 함수 ---
 def create_dashboard_html(df):
     try:
         df['date'] = pd.to_datetime(df['date'])
         df = df.sort_values(by='date')
 
-        # [수정] 데이터프레임에 있는 컬럼만 골라서 hover_data에 넣기
-        # 옛날 파일이라 'brand'가 없으면 자동으로 뺍니다.
+        # 데이터프레임에 있는 컬럼만 골라서 hover_data에 넣기
         available_cols = df.columns.tolist()
         hover_cols = ["price"]
         if "brand" in available_cols:
@@ -56,7 +55,7 @@ def create_dashboard_html(df):
             color="name", 
             title="Jomashop Price History (All Brands)",
             markers=True,
-            hover_data=hover_cols, # 동적으로 결정된 컬럼 사용
+            hover_data=hover_cols,
             template="plotly_white"
         )
         fig.update_layout(xaxis_title="Date", yaxis_title="Price ($)", legend_title="Product Name", hovermode="x unified")
@@ -67,9 +66,8 @@ def create_dashboard_html(df):
 
 # --- 2. 텔레그램용 그래프 생성 함수 ---
 def create_static_graph(df, sku, product_name):
-    # 'sku' 컬럼이 없는 구형 데이터 대응
+    # 'sku' 컬럼 호환성 처리
     if 'sku' not in df.columns:
-        # sku 대신 url이나 link로 대체 시도
         col_id = 'link' if 'link' in df.columns else 'url'
         if col_id not in df.columns: return None
         item_df = df[df[col_id] == sku].copy()
@@ -141,7 +139,7 @@ async def scroll_to_bottom(page):
         await page.keyboard.press("End")
         await asyncio.sleep(1)
 
-# --- 5. 브랜드 페이지 크롤링 (Pagination) ---
+# --- 5. 브랜드 페이지 크롤링 (팝업 제거 기능 추가됨) ---
 async def scrape_brand_page(page, brand_info):
     name = brand_info['name']
     url = brand_info['url']
@@ -160,7 +158,16 @@ async def scrape_brand_page(page, brand_info):
             except:
                 print("      ⚠️ 상품 없음 (종료)")
                 break
-                
+            
+            # [팝업 제거 시도] 페이지 로딩 후 팝업이 있으면 삭제
+            try:
+                await page.evaluate("""
+                    var popups = document.querySelectorAll('[id^="ltkpopup"]');
+                    popups.forEach(p => p.remove());
+                """)
+            except:
+                pass
+
             await scroll_to_bottom(page)
             
             product_cards = await page.locator("li.productItem").all()
@@ -198,10 +205,18 @@ async def scrape_brand_page(page, brand_info):
                 except:
                     continue
             
+            # [다음 페이지 이동] 
             next_btn = page.locator("li.pagination-next a")
             if await next_btn.count() > 0 and await next_btn.is_visible():
                 print("      👉 다음 페이지로 이동...")
-                await next_btn.click()
+                
+                # [핵심 수정] 팝업이 가려도 강제로 클릭하게 함 (force=True)
+                try:
+                    await next_btn.click(force=True)
+                except Exception as e:
+                    print(f"      ⚠️ 다음 페이지 클릭 실패: {e}")
+                    break
+                
                 await page.wait_for_timeout(3000)
                 page_num += 1
             else:
@@ -219,20 +234,16 @@ async def scrape_brand_page(page, brand_info):
 async def main():
     print("--- 🚀 조마샵 봇 시작 ---")
     
-    # 데이터 로드 (컬럼 유연성 확보)
     if os.path.exists(CSV_FILE):
         try:
             history_df = pd.read_csv(CSV_FILE, on_bad_lines='skip')
             history_df['date'] = pd.to_datetime(history_df['date'])
             
-            # SKU 컬럼 확인 (없으면 생성)
+            # 구형 데이터 호환성 체크
             if 'sku' not in history_df.columns:
                 print("⚠️ 구형 CSV 포맷 감지: 호환 모드로 로드")
-                # link나 url을 sku로 간주
-                if 'link' in history_df.columns:
-                    history_df['sku'] = history_df['link']
-                elif 'url' in history_df.columns:
-                    history_df['sku'] = history_df['url']
+                if 'link' in history_df.columns: history_df['sku'] = history_df['link']
+                elif 'url' in history_df.columns: history_df['sku'] = history_df['url']
             
             last_status = history_df.sort_values('date').groupby('sku').last()
             price_map = last_status['price'].to_dict()
@@ -270,9 +281,7 @@ async def main():
                 elif sku in price_map:
                     old_price = price_map[sku]
                     if old_price > 0 and price > 0 and price < old_price:
-                        # 히스토리 합쳐서 그래프 그리기 (안전하게)
-                        temp_df = pd.DataFrame([item])
-                        temp_history = pd.concat([history_df, temp_df], ignore_index=True)
+                        temp_history = pd.concat([history_df, pd.DataFrame([item])], ignore_index=True)
                         graph_file = create_static_graph(temp_history, sku, item['name'])
                         await send_telegram_alert(item, "DROP", old_price, graph_path=graph_file)
                         price_map[sku] = price 
@@ -285,7 +294,6 @@ async def main():
         new_df = pd.DataFrame(new_data_list)
         save_cols = ['date', 'brand', 'name', 'price', 'sku', 'link'] 
         
-        # 파일 저장 (CSV quoting 옵션으로 콤마 오류 방지)
         if os.path.exists(CSV_FILE):
             new_df[save_cols].to_csv(CSV_FILE, mode='a', header=False, index=False, encoding='utf-8-sig', quoting=csv.QUOTE_NONNUMERIC)
         else:
@@ -293,7 +301,6 @@ async def main():
             
         print(f"\n💾 데이터 저장 완료.")
         
-        # 대시보드 생성 시도
         try:
             full_df = pd.read_csv(CSV_FILE, on_bad_lines='skip')
             create_dashboard_html(full_df)
