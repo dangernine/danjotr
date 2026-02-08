@@ -3,7 +3,6 @@ name: Jomashop Tracker Bot
 on:
   schedule:
     # 매 시간 0분에 실행 (1시간 간격)
-    # 시간을 바꾸려면 앞의 숫자 0을 변경하세요. (예: 30 * * * * -> 매시 30분)
     - cron: '0 * * * *'
   
   # 수동으로 즉시 실행 버튼 활성화 (테스트용)
@@ -41,8 +40,10 @@ jobs:
 
       # 5. 메인 파이썬 스크립트 실행
       # Secrets에 등록한 텔레그램 토큰과 채팅 ID를 환경변수로 주입
+      # PYTHONUNBUFFERED: 1 설정으로 로그가 멈추지 않고 즉시 출력됨
       - name: Run Jomashop Bot
         env:
+          PYTHONUNBUFFERED: 1
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python main.py
