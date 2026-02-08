@@ -1,6 +1,4 @@
-requests
-beautifulsoup4
+playwright
 pandas
 python-telegram-bot
-playwright
 matplotlib
