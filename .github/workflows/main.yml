@@ -48,14 +48,17 @@ jobs:
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python main.py
 
-      # 6. 변경된 데이터(CSV)와 대시보드(HTML)를 저장소에 반영 (Commit & Push)
+      # 6. 변경된 데이터(CSV), 대시보드(HTML), .nojekyll 파일 저장 및 커밋
       - name: Commit and Push changes
         run: |
           git config --global user.name 'Jomashop Bot'
           git config --global user.email 'bot@github.com'
           
-          # 데이터 파일과 대시보드 파일 추가
-          git add price_history.csv index.html
+          # [핵심] .nojekyll 파일 생성 (깃허브 페이지 테마 적용 방지 -> 그래프 깨짐 해결)
+          touch .nojekyll
+          
+          # 데이터 파일, 대시보드 파일, .nojekyll 파일 모두 추가
+          git add price_history.csv index.html .nojekyll
           
           # 변경사항이 있을 때만 커밋하고 푸시 (에러 방지용 로직)
           # [skip ci]는 이 커밋으로 인해 액션이 또 실행되지 않도록 방지함
