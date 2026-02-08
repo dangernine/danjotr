@@ -2,3 +2,4 @@ playwright
 pandas
 python-telegram-bot
 plotly
+matplotlib
