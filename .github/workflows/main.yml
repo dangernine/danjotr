@@ -1,0 +1,47 @@
+name: Jomashop Tracker Bot
+
+on:
+  schedule:
+    # 4시간마다 실행 (한국 시간 기준 새벽/낮 등 하루 6번)
+    # 시간을 바꾸고 싶으면 cron 값을 수정하세요.
+    - cron: '0 */4 * * *'
+  workflow_dispatch: # 수동 실행 버튼 추가
+
+jobs:
+  run-tracker:
+    runs-on: ubuntu-latest
+    
+    # 봇이 CSV 파일을 수정해서 다시 저장소에 올릴 수 있는 권한 부여
+    permissions:
+      contents: write
+
+    steps:
+      - name: 저장소 코드 불러오기
+        uses: actions/checkout@v4
+
+      - name: 파이썬 설치
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: 라이브러리 설치
+        run: |
+          pip install -r requirements.txt
+
+      - name: Playwright 브라우저 설치
+        run: |
+          playwright install chromium
+
+      - name: 봇 실행
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: python main.py
+
+      - name: 데이터(CSV) 저장 및 커밋
+        run: |
+          git config --global user.name 'Jomashop Bot'
+          git config --global user.email 'bot@github.com'
+          git add price_history.csv
+          # 변경사항이 있을 때만 커밋하고 푸시 (에러 방지)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update price history [skip ci]" && git push)
