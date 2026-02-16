@@ -2,45 +2,37 @@ name: Jomashop Tracker Bot
 
 on:
   schedule:
-    # 매 시간 0분에 실행 (1시간 간격)
     - cron: '0 * * * *'
   
-  # 수동으로 즉시 실행 버튼 활성화 (테스트용)
   workflow_dispatch:
 
 jobs:
   run-tracker:
     runs-on: ubuntu-latest
     
-    # 저장소에 파일을 쓰고 커밋할 수 있는 권한 부여 (필수)
     permissions:
       contents: write
 
     steps:
-      # 1. 저장소 코드 내려받기
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 전체 Git 히스토리를 가져와서 병합 시 충돌 방지
 
-      # 2. 파이썬 3.10 환경 설정
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      # 3. 필요한 라이브러리 설치 (requirements.txt 기준)
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # 4. Playwright 브라우저 설치 (크롤링용)
       - name: Install Playwright Browsers
         run: |
           playwright install chromium
 
-      # 5. 메인 파이썬 스크립트 실행
-      # Secrets에 등록한 텔레그램 토큰과 채팅 ID를 환경변수로 주입
-      # PYTHONUNBUFFERED: 1 설정으로 로그가 멈추지 않고 즉시 출력됨
       - name: Run Jomashop Bot
         env:
           PYTHONUNBUFFERED: 1
@@ -48,18 +40,25 @@ jobs:
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python main.py
 
-      # 6. 변경된 데이터(CSV), 대시보드(HTML), .nojekyll 파일 저장 및 커밋
       - name: Commit and Push changes
         run: |
           git config --global user.name 'Jomashop Bot'
           git config --global user.email 'bot@github.com'
           
-          # [핵심] .nojekyll 파일 생성 (깃허브 페이지 테마 적용 방지 -> 그래프 깨짐 해결)
+          # .nojekyll 파일 생성
           touch .nojekyll
           
-          # 데이터 파일, 대시보드 파일, .nojekyll 파일 모두 추가
+          # 변경된 파일들 추가
           git add price_history.csv index.html .nojekyll
           
-          # 변경사항이 있을 때만 커밋하고 푸시 (에러 방지용 로직)
-          # [skip ci]는 이 커밋으로 인해 액션이 또 실행되지 않도록 방지함
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update Dashboard & Data [skip ci]" && git push)
+          # 변경사항이 있을 때만 커밋 및 푸시
+          if ! git diff --staged --quiet; then
+            git commit -m "Update Dashboard & Data [skip ci]"
+            
+            # [핵심] 푸시하기 전에 깃허브의 최신 버전을 당겨와서 합침 (충돌 방지)
+            git pull --rebase origin main
+            
+            git push
+          else
+            echo "변경사항이 없어 푸시하지 않습니다."
+          fi
